@@ -1,3 +1,20 @@
+-- =====================================================================
+-- CONSULTA 1 — Productos activos en un rango de precio, ordenados por precio
+-- VERSIÓN RÁPIDA (índice B-Tree sobre precio_actual)
+--
+-- Problema identificado en la versión lenta:
+--   Sin índice en precio_actual, PostgreSQL recorría las 50.000 filas
+--   completas de producto descartando 48.130 (96% de la tabla) para
+--   encontrar solo 1.870 filas en el rango 100-500.
+--
+-- Solución aplicada:
+--   Un índice B-Tree sobre precio_actual permite a PostgreSQL hacer
+--   un Index Scan directo al rango solicitado sin leer filas fuera
+--   del intervalo. Se agrega el filtro activo = TRUE en el índice
+--   (índice parcial) para que también descarte productos inactivos
+--   sin costo extra en la búsqueda.
+-- =====================================================================
+
 -- Paso 1: crear el índice parcial sobre precio_actual para productos activos
 CREATE INDEX IF NOT EXISTS idx_producto_precio_activo
     ON producto (precio_actual DESC)

@@ -22,3 +22,5 @@ JOIN detalle_pedido dp ON dp.id_pedido   = p.id_pedido
 JOIN producto pr       ON pr.id_producto = dp.id_producto
 WHERE p.fecha_hora BETWEEN '2026-08-01' AND '2026-09-09'
 ORDER BY p.fecha_hora DESC;
+
+

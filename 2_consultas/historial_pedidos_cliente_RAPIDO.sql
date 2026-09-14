@@ -23,3 +23,4 @@ JOIN detalle_pedido dp ON dp.id_pedido  = p.id_pedido
 WHERE cl.apellido ILIKE '%Apellido150%'
 GROUP BY p.id_pedido, p.fecha_hora, p.forma_pago, cl.nombre, cl.apellido
 ORDER BY p.fecha_hora DESC;
+
