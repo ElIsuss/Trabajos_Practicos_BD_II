@@ -1,0 +1,3 @@
+| Equipo | Estrategia aplicada | Tiempo antes (ms) | Tiempo después (ms) | Mejora (x) |
+|--------|---------------------|-------------------|---------------------|------------|
+| Nuestro Equipo | Creación de Índice Parcial Cubriente: CREATE INDEX idx_producto_precio_activo_optimo ON producto (precio_actual DESC) INCLUDE (nombre, stock, id_categoria) WHERE activo = TRUE; | 6.429 ms (Lectura caliente: ~110 ms) | 0.250 ms | ~25.7x (vs base) / ~440x (vs lectura en caliente) |
