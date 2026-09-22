@@ -8,6 +8,7 @@
 | OpenCode | Índices para los JOINs de "Ranking de clientes por gasto" (specs/optimizacion_ranking_clientes.md) | "Propone la sentencia CREATE INDEX necesaria para optimizar los JOINs de esta consulta." | Aceptado. Dos índices B-tree sobre las FKs de los JOINs: `idx_pedido_id_cliente ON pedido (id_cliente)` y `idx_detalle_pedido_id_pedido ON detalle_pedido (id_pedido)`. `cliente` no necesita índice (tabla de origen del recorrido). |
 | OpenCode | Generación de vistas de reportes (specs/vistas_reportes.md) | "Genera las sentencias CREATE OR REPLACE VIEW para views.sql y explica cada vista para duia.md." | Aceptado con adaptaciones en una 1.ª iteración: se mapearon los nombres del esquema real (`precio_actual` → `precio_unitario`, `correo_electronico` → `email`) y se omitió `estado` porque el esquema no lo poseía. |
 | OpenCode | Revisión del criterio de seguridad y adecuación al esquema (specs/vistas_reportes.md) | "Prefiero hacerlo como en el spec; si hace falta crear la fila de password, hacelo con CREATE TABLE usuario..., corrigiendo los errores." | Aceptado con correcciones. Reemplaza la iteración anterior: (1) se creó el enum `rol` que faltaba; (2) se agregó `usuario.id_cliente` FK UNIQUE a `cliente` para vincular credenciales con los pedidos; (3) se agregó `pedido.estado` (`estado_pedido_enum`, DEFAULT 'PENDIENTE') exigido por la spec; (4) `v_pedidos_usuario` ahora incluye `estado` y cumple la regla de seguridad (omite `contrasena`). |
+| OpenCode | Vista materializada para facturacion por categoria y mes (specs/materializada_facturacion_categoria_mes.md) | "Crear una vista materializada para el reporte historico de facturacion por categoria y mes, con WITH DATA e indice unico para REFRESH CONCURRENTLY." | Aceptado. Se creo `mv_facturacion_categoria_mes` y el indice unico `(categoria, mes)`. La consulta bajo de `423.323 ms` a `0.107 ms`. Se definio refresco diario; el reporte puede no incluir ventas posteriores al ultimo refresco. |
 
 ## 1. Optimización de consultas (índices)
 
@@ -76,6 +77,14 @@ Comparar cada vista contra su consulta sin vista con `EXCEPT` (mismo número de 
 UNION ALL
 (SELECT ... ); -- (reverso: base EXCEPT vista)
 ```
+
+## 4. Vista materializada: facturacion por categoria y mes
+
+- **Spec utilizada:** `specs/materializada_facturacion_categoria_mes.md`.
+- **Propuesta aceptada:** crear `mv_facturacion_categoria_mes` con `WITH DATA` a partir de la consulta de facturacion por categoria y mes.
+- **Indice aceptado:** indice unico sobre `(categoria, mes)`, necesario para poder ejecutar `REFRESH MATERIALIZED VIEW CONCURRENTLY`.
+- **Medicion:** la consulta original tardo `423.323 ms`; la consulta sobre la vista materializada tardo `0.107 ms` y leyo 250 filas agregadas.
+- **Decision de refresco:** una vez por dia al cierre de la jornada. La consecuencia es que el reporte muestra los datos vigentes al ultimo refresco, no necesariamente las ventas mas recientes.
 
 ## Orden de ejecución recomendado
 `schema_completo.sql` → `data.sql` → `seguridad_usuario.sql` → `views.sql` → `indices.sql`

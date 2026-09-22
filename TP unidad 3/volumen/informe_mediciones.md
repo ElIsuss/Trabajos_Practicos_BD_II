@@ -75,3 +75,90 @@
  Planning Time: 0.357 ms
  Execution Time: 652.446 ms
 (22 rows)
+
+## Consulta 3: Ranking de clientes por gasto
+
+### Antes de crear `idx_detalle_pedido_id_pedido`
+
+El plan realizaba escaneos secuenciales sobre las tablas involucradas:
+
+```text
+Parallel Seq Scan on detalle_pedido dp
+Parallel Seq Scan on pedido p
+Seq Scan on cliente c
+Planning Time: 35.567 ms
+Execution Time: 388.309 ms
+```
+
+Los JOIN se resolvieron mediante `Parallel Hash Join` y `Hash Join`. La consulta procesa gran parte de las filas de `detalle_pedido` y `pedido` para calcular el gasto acumulado de todos los clientes.
+
+### Después de crear `idx_detalle_pedido_id_pedido`
+
+Índice evaluado:
+
+```sql
+CREATE INDEX idx_detalle_pedido_id_pedido
+ON detalle_pedido (id_pedido);
+```
+
+El plan posterior continuó usando escaneos secuenciales:
+
+```text
+Parallel Seq Scan on detalle_pedido dp
+Parallel Seq Scan on pedido p
+Seq Scan on cliente c
+Planning Time: 1.570 ms
+Execution Time: 295.607 ms
+```
+
+### Resultado de la medición
+
+El tiempo de ejecución bajó de `388.309 ms` a `295.607 ms`, pero el plan no pasó a `Index Scan` ni a `Bitmap Heap Scan` y no utilizó `idx_detalle_pedido_id_pedido`. Por lo tanto, la reducción de tiempo no puede atribuirse al índice: la segunda ejecución tuvo más páginas en caché (`shared hit`) y menos lecturas de disco.
+
+Este resultado muestra que, para una consulta agregada que necesita recorrer casi todas las filas, un índice sobre `detalle_pedido(id_pedido)` no resulta conveniente según el plan elegido por PostgreSQL.
+
+## Consulta 1: Facturación por categoría y mes
+
+### Medición del reporte histórico
+
+La consulta calcula la facturación para todo el historial, agrupada por categoría y mes. El plan observado utilizó:
+
+```text
+Parallel Seq Scan on detalle_pedido dp
+Parallel Seq Scan on pedido p
+Seq Scan on producto pr
+Seq Scan on categoria c
+Planning Time: 12.902 ms
+Execution Time: 423.323 ms
+```
+
+Los JOIN se resolvieron con `Parallel Hash Join` y `Hash Join`. En particular, la consulta debe recorrer prácticamente todas las filas de `pedido` y `detalle_pedido` para producir los totales históricos, por lo que PostgreSQL eligió correctamente escaneos secuenciales paralelos.
+
+### Decisión
+
+No se fuerza un índice ni se modifica la consulta con un filtro de fecha, porque el reporte requerido incluye todos los meses y un índice no evitaría leer el conjunto completo de datos. La alternativa adecuada para acelerar este reporte de lectura frecuente será evaluarlo como vista materializada en la Parte C.
+
+## Parte C: Vista materializada de facturacion por categoria y mes
+
+### Consulta original
+
+La consulta original de facturacion historica por categoria y mes obtuvo un tiempo de ejecucion de `423.323 ms`.
+
+### Consulta sobre la vista materializada
+
+Se creo `mv_facturacion_categoria_mes` con `WITH DATA` y el indice unico `idx_mv_facturacion_categoria_mes (categoria, mes)`, que permite futuros refrescos concurrentes.
+
+```text
+Sort  (actual time=0.082..0.089 rows=250 loops=1)
+  Sort Key: mes, facturacion_total DESC
+  -> Seq Scan on mv_facturacion_categoria_mes
+     (actual time=0.030..0.042 rows=250 loops=1)
+Planning Time: 5.327 ms
+Execution Time: 0.107 ms
+```
+
+El `Seq Scan` sobre la vista materializada es adecuado: solo contiene 250 filas agregadas y utiliza 4 paginas en cache. Consultar la vista materializada redujo el tiempo de `423.323 ms` a `0.107 ms`.
+
+### Frecuencia de refresco
+
+Se propone ejecutar `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_facturacion_categoria_mes` una vez por dia, al cierre de la jornada. El reporte no mostrara ventas incorporadas despues del ultimo refresco hasta que se ejecute el siguiente; a cambio, las consultas de lectura no quedan bloqueadas durante el refresco.

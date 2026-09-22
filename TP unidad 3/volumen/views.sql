@@ -63,3 +63,25 @@ SELECT
     (dp.cantidad * dp.precio_unitario) AS subtotal
 FROM detalle_pedido dp
 JOIN producto pr ON pr.id_producto = dp.id_producto;
+
+-- ---------------------------------------------------------------
+-- 4. mv_facturacion_categoria_mes
+-- Reporte historico agregado para acelerar la facturacion por
+-- categoria y mes. Se carga al crearla con WITH DATA.
+-- ---------------------------------------------------------------
+CREATE MATERIALIZED VIEW mv_facturacion_categoria_mes AS
+SELECT
+    c.nombre AS categoria,
+    DATE_TRUNC('month', p.fecha_hora) AS mes,
+    SUM(dp.cantidad * dp.precio_unitario) AS facturacion_total
+FROM pedido p
+JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido
+JOIN producto pr ON pr.id_producto = dp.id_producto
+JOIN categoria c ON c.id_categoria = pr.id_categoria
+GROUP BY c.nombre, DATE_TRUNC('month', p.fecha_hora)
+WITH DATA;
+
+-- Una fila del reporte se identifica por categoria y mes.
+-- Permite usar REFRESH MATERIALIZED VIEW CONCURRENTLY.
+CREATE UNIQUE INDEX idx_mv_facturacion_categoria_mes
+ON mv_facturacion_categoria_mes (categoria, mes);
