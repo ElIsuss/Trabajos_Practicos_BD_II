@@ -76,6 +76,7 @@
  Execution Time: 652.446 ms
 (22 rows)
 
+<<<<<<< HEAD:TP unidad 3/volumen/informe_mediciones.md
 ## Consulta 3: Ranking de clientes por gasto
 
 ### Antes de crear `idx_detalle_pedido_id_pedido`
@@ -162,3 +163,33 @@ El `Seq Scan` sobre la vista materializada es adecuado: solo contiene 250 filas 
 ### Frecuencia de refresco
 
 Se propone ejecutar `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_facturacion_categoria_mes` una vez por dia, al cierre de la jornada. El reporte no mostrara ventas incorporadas despues del ultimo refresco hasta que se ejecute el siguiente; a cambio, las consultas de lectura no quedan bloqueadas durante el refresco.
+=======
+
+
+## Consulta 3: Ranking de Clientes por Gasto
+
+### Resumen de Impacto
+- **Plan Anterior:** `Parallel Seq Scan` sobre `pedido`, `detalle_pedido` y `cliente` (con `Parallel Hash Join`)
+- **Plan Nuevo:** `Parallel Seq Scan` con `Parallel Hash Join` (El planificador mantuvo el escaneo paralelo debido a la agregación total de la tabla)
+- **Tiempo de Ejecución:** Variación de **622.58 ms** a **559.54 ms**
+- **Índice Evaluado:** `CREATE INDEX idx_pedido_id_cliente ON pedido (id_cliente);`
+
+---
+
+### 1. EXPLAIN ANALYZE — Antes de la Optimización
+```sql
+Sort  (cost=26123.72..26173.72 rows=20000 width=104) (actual time=595.716..599.353 rows=20000.00 loops=1)
+   ->  WindowAgg  (cost=24244.96..24694.95 rows=20000 width=104) (actual time=574.119..593.140 rows=20000.00 loops=1)
+         ->  Parallel Hash Join  (cost=4118.06..12267.56 rows=249781 width=18)
+               ->  Parallel Seq Scan on detalle_pedido dp
+               ->  Parallel Seq Scan on pedido p
+Execution Time: 622.580 ms
+2. EXPLAIN ANALYZE — Después del Índice idx_pedido_id_cliente
+
+Sort  (cost=26123.72..26173.72 rows=20000 width=104) (actual time=530.983..534.705 rows=20000.00 loops=1)
+   ->  WindowAgg  (cost=24244.96..24694.95 rows=20000 width=104) (actual time=509.134..528.164 rows=20000.00 loops=1)
+         ->  Parallel Hash Join  (cost=4118.06..12267.56 rows=249781 width=18)
+               ->  Parallel Seq Scan on detalle_pedido dp
+               ->  Parallel Seq Scan on pedido p
+Execution Time: 559.541 ms
+>>>>>>> d443a24 (Ordenamos los TP anteriores):TP unidad 3/food-store/informe_mediciones.md
