@@ -7,7 +7,7 @@
 
 ## Orden de ejecucion
 
-1. Ejecutar `schema_completo.sql`, ubicado en la carpeta `food-store`.
+1. Ejecutar `schema_completo.sql`, ubicado en la carpeta `food_store`.
    Crea las tablas, tipos, restricciones e indices heredados.
 
 2. Ejecutar `data.sql`, ubicado en la carpeta `food-store`.

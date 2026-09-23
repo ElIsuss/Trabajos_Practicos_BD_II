@@ -25,16 +25,19 @@ OpenCode, modelo OpenAI gpt-5.6-terra.
 
 ## Prompts utilizados
 
-### Categoría obligatoria
+### Regla de categoría obligatoria
 
 No se conservó el texto exacto del prompt. La regla propuesta era que
 `producto.id_categoria` no pudiera ser nulo y que debiera existir en
-`categoria.id_categoria`.
+`categoria.id_categoria`. La revisión posterior determinó que esta regla ya
+forma parte de `Unidad 1/TP_1/schema.sql`, por lo que no se vuelve a agregar
+como restricción nueva.
 
 ### Correo electrónico con formato válido
 
 No se conservó el texto exacto del prompt. La regla propuesta era validar un
-formato básico de correo electrónico.
+formato básico de correo electrónico. Se conserva el resumen disponible, pero
+no se presenta como transcripción literal.
 
 ### Nombre de producto no vacío
 
@@ -75,6 +78,9 @@ al final.
 La relación entre `producto` y `categoria` conserva `ON DELETE RESTRICT`, porque
 impide eliminar una categoría que tenga productos asociados.
 
+La nulabilidad de `producto.id_categoria` y la FK `fk_producto_categoria` se
+verificaron en `schema.sql` y no se modificaron nuevamente.
+
 ## Qué se modificó o descartó
 
 Se reemplazaron los comentarios `RN04` y `RN05` por comentarios descriptivos
@@ -89,15 +95,105 @@ conservaron.
 
 ## Verificación
 
-Estado: pendiente de completar.
+### Estado
 
-Antes de considerar la verificación como realizada deben registrarse:
+La parte documental de la DUIA está completa. La verificación de ejecución
+sigue pendiente: no se conserva una salida real de PostgreSQL para los casos
+válidos o inválidos. Por lo tanto, no se afirma que las pruebas hayan sido
+ejecutadas.
 
-1. El respaldo generado con `pg_dump`.
-2. La aplicación de las restricciones dentro de `BEGIN; ... ROLLBACK;`.
-3. Inserciones válidas e inválidas.
-4. La salida exacta de PostgreSQL.
-5. La repetición con `COMMIT` únicamente después de aprobar los resultados.
+### Evidencia estática disponible
+
+| Regla | Implementación | Evidencia documental | Estado de ejecución |
+|---|---|---|---|
+| Correo con formato válido | `restriciones.sql:16-18` | Restricción `chk_cliente_correo_formato` definida | Pendiente |
+| Nombre de producto no vacío | `restriciones.sql:20-23` | Restricción `chk_producto_nombre_no_vacio` definida | Pendiente |
+| Nombre y apellido no vacíos | `restriciones.sql:25-30` | Restricción `chk_cliente_nombre_apellido_no_vacios` definida | Pendiente |
+| Categoría obligatoria y FK | `Unidad 1/TP_1/schema.sql:37-40` | Regla preexistente con `ON DELETE RESTRICT` | No es nueva |
+
+### Procedimiento reproducible
+
+La siguiente secuencia debe ejecutarse únicamente sobre `foodstore_trabajo`.
+Antes de aplicar el archivo de restricciones se debe generar un respaldo:
+
+```bash
+pg_dump foodstore_trabajo > backups/backup_antes_restricciones_<FECHA>_<HORA>.sql
+```
+
+Cada caso se ejecuta en una transacción independiente. Una restricción violada
+aborta la transacción; después de cada prueba se debe ejecutar `ROLLBACK` hasta
+disponer de la salida real.
+
+### Caso válido: correo y nombres
+
+```sql
+BEGIN;
+
+INSERT INTO cliente (nombre, apellido, correo_electronico)
+VALUES ('Cliente', 'Prueba DUIA', 'duia.valido@example.com');
+
+SELECT nombre, apellido, correo_electronico
+FROM cliente
+WHERE correo_electronico = 'duia.valido@example.com';
+
+ROLLBACK;
+```
+
+Resultado esperado: el `INSERT` y el `SELECT` devuelven la fila, y el
+`ROLLBACK` no deja datos persistentes.
+
+### Caso inválido: correo
+
+```sql
+BEGIN;
+
+INSERT INTO cliente (nombre, apellido, correo_electronico)
+VALUES ('Cliente', 'Correo inválido', 'correo-sin-arroba');
+
+ROLLBACK;
+```
+
+Resultado esperado: PostgreSQL informa una violación de
+`chk_cliente_correo_formato`, con SQLSTATE `23514`.
+
+### Caso inválido: nombre de producto
+
+```sql
+BEGIN;
+
+INSERT INTO producto (nombre, precio_actual, stock, id_categoria)
+SELECT '   ', 10.00, 1, MIN(id_categoria)
+FROM categoria;
+
+ROLLBACK;
+```
+
+Resultado esperado: PostgreSQL informa una violación de
+`chk_producto_nombre_no_vacio`, con SQLSTATE `23514`.
+
+### Caso inválido: nombre y apellido de cliente
+
+```sql
+BEGIN;
+
+INSERT INTO cliente (nombre, apellido, correo_electronico)
+VALUES ('   ', '   ', 'duia.nombres@example.com');
+
+ROLLBACK;
+```
+
+Resultado esperado: PostgreSQL informa una violación de
+`chk_cliente_nombre_apellido_no_vacios`, con SQLSTATE `23514`.
+
+### Cierre de la verificación
+
+Para cambiar el estado a verificado deben guardarse:
+
+1. La salida real del `pg_dump`.
+2. La salida de cada `INSERT` válido e inválido.
+3. Los mensajes de error y SQLSTATE entregados por PostgreSQL.
+4. La confirmación de que cada prueba terminó con `ROLLBACK`.
+5. La repetición con `COMMIT` únicamente después de revisar los resultados.
 
 No deben documentarse errores de PostgreSQL como resultados reales hasta haber
 obtenido esa salida mediante una ejecución efectiva.
