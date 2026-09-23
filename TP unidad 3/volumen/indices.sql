@@ -9,3 +9,8 @@ CREATE INDEX idx_detalle_pedido_id_producto ON detalle_pedido (id_producto);
 -- Consulta 3: Ranking de clientes por gasto
 -- Reemplaza Parallel Seq Scan sobre pedido en el JOIN por Index Scan / Hash Join eficiente
 CREATE INDEX idx_pedido_id_cliente ON pedido (id_cliente);
+
+
+-- Consulta 4: Pedidos recientes por cliente
+-- Optimiza el filtrado por cliente, rango de fechas y evita el paso explícito de Sort
+CREATE INDEX idx_pedido_cliente_fecha ON pedido (id_cliente, fecha_hora DESC);

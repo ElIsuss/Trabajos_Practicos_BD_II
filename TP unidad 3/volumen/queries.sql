@@ -39,3 +39,11 @@ JOIN pedido p          ON c.id_cliente = p.id_cliente
 JOIN detalle_pedido dp ON p.id_pedido  = dp.id_pedido
 GROUP BY c.id_cliente, c.nombre, c.apellido
 ORDER BY puesto;
+
+
+-- 4. Búsqueda de pedidos recientes por cliente
+SELECT p.id_pedido, p.fecha_hora, p.forma_pago, p.estado
+FROM pedido p
+WHERE p.id_cliente = 1500
+  AND p.fecha_hora >= NOW() - INTERVAL '180 days'
+ORDER BY p.fecha_hora DESC; 

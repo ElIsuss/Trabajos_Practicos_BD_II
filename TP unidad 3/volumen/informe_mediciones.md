@@ -76,7 +76,7 @@
  Execution Time: 652.446 ms
 (22 rows)
 
-<<<<<<< HEAD:TP unidad 3/volumen/informe_mediciones.md
+
 ## Consulta 3: Ranking de clientes por gasto
 
 ### Antes de crear `idx_detalle_pedido_id_pedido`
@@ -118,26 +118,49 @@ El tiempo de ejecución bajó de `388.309 ms` a `295.607 ms`, pero el plan no pa
 
 Este resultado muestra que, para una consulta agregada que necesita recorrer casi todas las filas, un índice sobre `detalle_pedido(id_pedido)` no resulta conveniente según el plan elegido por PostgreSQL.
 
-## Consulta 1: Facturación por categoría y mes
+## Consulta: Histórico de Pedidos Recientes por Cliente
 
-### Medición del reporte histórico
+### Resumen de Impacto
+- **Plan Anterior:** `Bitmap Index Scan` sobre `idx_pedido_id_cliente` + `Filter` + `Sort (quicksort)`
+- **Plan Nuevo:** `Bitmap Index Scan` sobre `idx_pedido_cliente_fecha`
+- **Tiempo de Ejecución:** Reducción de **15.38 ms** a **0.17 ms** (~92.6× más rápido)
+- **Índice Creado:** `CREATE INDEX idx_pedido_cliente_fecha ON pedido (id_cliente, fecha_hora DESC);`
 
-La consulta calcula la facturación para todo el historial, agrupada por categoría y mes. El plan observado utilizó:
+---
 
-```text
-Parallel Seq Scan on detalle_pedido dp
-Parallel Seq Scan on pedido p
-Seq Scan on producto pr
-Seq Scan on categoria c
-Planning Time: 12.902 ms
-Execution Time: 423.323 ms
-```
+### 1. EXPLAIN ANALYZE — Antes de la Optimización
+```sql
+Sort  (cost=42.11..42.11 rows=2 width=24) (actual time=15.283..15.284 rows=0.00 loops=1)
+   Sort Key: fecha_hora DESC
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=6 read=12
+   ->  Bitmap Heap Scan on pedido p  (cost=4.37..42.10 rows=2 width=24) (actual time=7.813..7.813 rows=0.00 loops=1)
+         Recheck Cond: (id_cliente = 1500)
+         Filter: (fecha_hora >= (now() - '180 days'::interval))
+         Rows Removed by Filter: 11
+         Heap Blocks: exact=10
+         Buffers: shared hit=3 read=12
+         ->  Bitmap Index Scan on idx_pedido_id_cliente  (cost=0.00..4.37 rows=10 width=0) (actual time=0.473..0.473 rows=11.00 loops=1)
+               Index Cond: (id_cliente = 1500)
+               Index Searches: 1
+               Buffers: shared hit=3 read=2
+Planning Time: 19.325 ms
+Execution Time: 15.382 ms
+2. EXPLAIN ANALYZE — Después de la Optimización (idx_pedido_cliente_fecha)
 
-Los JOIN se resolvieron con `Parallel Hash Join` y `Hash Join`. En particular, la consulta debe recorrer prácticamente todas las filas de `pedido` y `detalle_pedido` para producir los totales históricos, por lo que PostgreSQL eligió correctamente escaneos secuenciales paralelos.
-
-### Decisión
-
-No se fuerza un índice ni se modifica la consulta con un filtro de fecha, porque el reporte requerido incluye todos los meses y un índice no evitaría leer el conjunto completo de datos. La alternativa adecuada para acelerar este reporte de lectura frecuente será evaluarlo como vista materializada en la Parte C.
+Sort  (cost=12.27..12.28 rows=2 width=24) (actual time=0.136..0.137 rows=0.00 loops=1)
+   Sort Key: fecha_hora DESC
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared read=3
+   ->  Bitmap Heap Scan on pedido p  (cost=4.45..12.26 rows=2 width=24) (actual time=0.131..0.131 rows=0.00 loops=1)
+         Recheck Cond: ((id_cliente = 1500) AND (fecha_hora >= (now() - '180 days'::interval)))
+         Buffers: shared read=3
+         ->  Bitmap Index Scan on idx_pedido_cliente_fecha  (cost=0.00..4.44 rows=2 width=0) (actual time=0.113..0.113 rows=0.00 loops=1)
+               Index Cond: ((id_cliente = 1500) AND (fecha_hora >= (now() - '180 days'::interval)))
+               Index Searches: 1
+               Buffers: shared read=3
+Planning Time: 2.176 ms
+Execution Time: 0.166 ms
 
 ## Parte C: Vista materializada de facturacion por categoria y mes
 
@@ -166,30 +189,3 @@ Se propone ejecutar `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_facturacion_categ
 =======
 
 
-## Consulta 3: Ranking de Clientes por Gasto
-
-### Resumen de Impacto
-- **Plan Anterior:** `Parallel Seq Scan` sobre `pedido`, `detalle_pedido` y `cliente` (con `Parallel Hash Join`)
-- **Plan Nuevo:** `Parallel Seq Scan` con `Parallel Hash Join` (El planificador mantuvo el escaneo paralelo debido a la agregación total de la tabla)
-- **Tiempo de Ejecución:** Variación de **622.58 ms** a **559.54 ms**
-- **Índice Evaluado:** `CREATE INDEX idx_pedido_id_cliente ON pedido (id_cliente);`
-
----
-
-### 1. EXPLAIN ANALYZE — Antes de la Optimización
-```sql
-Sort  (cost=26123.72..26173.72 rows=20000 width=104) (actual time=595.716..599.353 rows=20000.00 loops=1)
-   ->  WindowAgg  (cost=24244.96..24694.95 rows=20000 width=104) (actual time=574.119..593.140 rows=20000.00 loops=1)
-         ->  Parallel Hash Join  (cost=4118.06..12267.56 rows=249781 width=18)
-               ->  Parallel Seq Scan on detalle_pedido dp
-               ->  Parallel Seq Scan on pedido p
-Execution Time: 622.580 ms
-2. EXPLAIN ANALYZE — Después del Índice idx_pedido_id_cliente
-
-Sort  (cost=26123.72..26173.72 rows=20000 width=104) (actual time=530.983..534.705 rows=20000.00 loops=1)
-   ->  WindowAgg  (cost=24244.96..24694.95 rows=20000 width=104) (actual time=509.134..528.164 rows=20000.00 loops=1)
-         ->  Parallel Hash Join  (cost=4118.06..12267.56 rows=249781 width=18)
-               ->  Parallel Seq Scan on detalle_pedido dp
-               ->  Parallel Seq Scan on pedido p
-Execution Time: 559.541 ms
->>>>>>> d443a24 (Ordenamos los TP anteriores):TP unidad 3/food-store/informe_mediciones.md
