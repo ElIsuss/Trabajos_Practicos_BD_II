@@ -182,3 +182,5 @@ COMMIT;
 
 ### Conclusión
 La explicación de la IA se confirmó al 100% en el motor real. El nivel de aislamiento por defecto `READ COMMITTED` permite lecturas no repetibles por diseño, mientras que al elevar el aislamiento a `REPEATABLE READ` (mediante el mecanismo MVCC de fotos fijas por transacción) el problema se resuelve por completo.
+
+
