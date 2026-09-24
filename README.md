@@ -70,6 +70,17 @@ Primero se debe crear la base de datos de trabajo:
         LEFT JOIN cliente c ON p.id_cliente = c.id_cliente
         WHERE c.id_cliente IS NULL;
 
+## Paso 3: Agregamos usuarios al sistema
+1. Una vez cargados los datos debemos ejecutar el script llamado "seguridad_usuario" ubicado en la carpeta "food_store" en el TP 5
+2. Copie el codigo de ese archivo en un script vinculo a la base de datos 
+3. Ejecute todo el codigo
+4. Para verificar que este script de seguridad se ejecutó correctamente, corra el siguiente script
+
+        SELECT COUNT(*) AS cantidad_usuarios
+        FROM usuario;
+    
+    Este comando lo que hace es agregar usuarios al sistema y los relaciona con clientes exitentes, por ende, 
+    al hacer el comando de verificacion deberia tener la misma cantidad de usuarios como de clientes (20.000)
 ### Orden de ejecución
 
 Los pasos deben realizarse en el siguiente orden:
