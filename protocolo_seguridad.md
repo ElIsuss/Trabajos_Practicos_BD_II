@@ -18,7 +18,7 @@ Este procedimiento se aplicara a todo cambio realizado sobre la base de datos, y
 * **Base de datos original:** `<NOMBRE_BASE_ORIGINAL>`
 * **Base de datos de trabajo:** `<NOMBRE_COPIA_TRABAJO>`
 * **Directorio de respaldos:** `backups/`
-
+       
 Los nombres de las bases de datos deberan reemplazarse por los utilizados realmente en el proyecto.
 
 ---
