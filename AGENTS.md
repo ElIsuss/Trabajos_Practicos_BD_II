@@ -1,21 +1,83 @@
-# Food Store - Agent Instructions
+# AGENTS.md
 
-## Repository Scope
+## Reglas para trabajar con la base de datos
 
-- `schema.sql` is the PostgreSQL schema entrypoint. It creates `forma_pago_enum`, the five Food Store tables, and their indexes; it has no seed data or migration runner.
-- Keep database identifiers and constraint naming in Spanish, following the existing `snake_case` names and prefixes: `fk_`, `chk_`, `unq_`, and `idx_`.
-- Product and category deletion is intentionally restricted with foreign keys; product/category deactivation uses the `activo` flag. Do not replace these rules with cascade deletes without an explicit requirement.
+Estas reglas son obligatorias para cualquier agente de IA que trabaje con la base de datos del proyecto.
 
-## Safe Database Changes
+### 1. Crear un backup antes de trabajar
 
-- Never execute SQL against real or third-party data. Use a development copy; the assignment suggests `createdb -T plantilla_base copia_trabajo`.
-- Before any DDL (`ALTER`, `DROP`, or migration), back up the working copy with `pg_dump`.
-- Run every write first inside `BEGIN; ... ROLLBACK;`, inspect the result, and only then repeat it with `COMMIT` after approval.
-- Read the complete diff before applying it: `git diff`. Every proposed SQL line must be explainable for the oral defense.
-- For new integrity rules, write an unambiguous spec with the exact table and columns first, then test valid and invalid `INSERT` cases on the working copy.
+Antes de realizar cualquier modificación en la base de datos, crear un backup de la base de trabajo.
 
-## Assignment Deliverables
+El backup debe incluir la fecha y hora:
 
-- Keep the safety procedure in root `protocolo_seguridad.md`, adapted to the local PostgreSQL commands and backup location.
-- Document each IA-assisted exercise in its DUIA, including the exact prompt, generated changes, accepted/modified portions, and verification evidence.
-- Record concurrency work in root `informe_concurrencia.md`: commands and actual output from both sessions, IA explanation, and the result of verifying it in PostgreSQL. Reproduce at least three scenarios.
+```bash
+pg_dump foodstore_trabajo > backups/backup_AAAA-MM-DD_HHMM.sql
+```
+
+Nunca trabajar sobre la base original.
+
+### 2. Explicar antes de modificar
+
+Antes de ejecutar cambios, el agente debe explicar:
+
+* qué se va a modificar;
+* qué archivos o tablas serán afectados;
+* por qué se necesita realizar el cambio;
+* qué resultado se espera obtener.
+
+### 3. Pedir confirmación
+
+El agente **no debe ejecutar cambios importantes automáticamente**.
+
+Primero debe explicar el cambio y esperar la confirmación del usuario.
+
+Ejemplo:
+
+> Se va a agregar un índice en `pedido(id_cliente, fecha_hora)` para mejorar las consultas de pedidos recientes por cliente. ¿Querés que lo aplique?
+
+### 4. No hacer muchos cambios de golpe
+
+Los cambios deben realizarse de forma **progresiva y controlada**.
+
+Evitar modificar muchas tablas, archivos o estructuras al mismo tiempo.
+
+Después de cada cambio importante, comprobar que todo siga funcionando correctamente.
+
+### 5. Verificar después de modificar
+
+Después de realizar un cambio, el agente debe comprobar que:
+
+* la modificación se aplicó correctamente;
+* no se perdieron datos;
+* las relaciones siguen funcionando;
+* no aparecieron errores inesperados.
+
+### 6. No eliminar ni sobrescribir sin autorización
+
+No ejecutar automáticamente:
+
+```sql
+DROP
+TRUNCATE
+DELETE
+```
+
+cuando puedan afectar datos existentes.
+
+Si una operación puede provocar pérdida de información, debe explicarse primero y solicitar confirmación.
+
+### 7. No asumir
+
+Si el agente no sabe con certeza cómo está estructurada la base de datos, debe comprobarlo antes de modificarla.
+
+No debe inventar tablas, columnas, relaciones, índices u otros elementos.
+
+### 8. Informar el resultado
+
+Al terminar una tarea, indicar brevemente:
+
+* qué se modificó;
+* qué se verificó;
+* si hubo algún problema.
+
+**Regla principal: primero backup → después explicar → pedir confirmación → realizar el cambio → verificar.**
