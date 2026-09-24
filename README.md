@@ -1,52 +1,80 @@
-Procedimiento de creación de la base de datos FoodStore
-Objetivo
+# Procedimiento de creación de la base de datos FoodStore
+
+## Objetivo
 
 Este documento indica los pasos necesarios para crear la base de datos de trabajo del proyecto FoodStore y realizar la carga masiva de datos.
 
 Los archivos necesarios se encuentran dentro de la carpeta FoodStore, ubicada en la raíz del proyecto.
 
+
 FoodStore/
 ├── schema_completo.sql
 └── data.sql
-Paso 1: Crear la estructura de la base de datos
+
+## Paso 1: Crear la estructura de la base de datos
 
 Primero se debe crear la base de datos de trabajo:
 
-createdb foodstore_trabajo
+1. Dentro de Dbeaver crea la base de datos (food_store_Juan_e_Isaias)
+2. En un script vinculado a esa base de datos copiar el codigo que se encuentra en "schema_completo.sql"
+3. Para confirmar que se genero la base de datos puede ejecutar el siguiente script:
+    
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+        ORDER BY table_name;
+    
+    Le deberia aparecer las tablas de la base de datos:
+    categoria
+    cliente
+    detalle_pedido
+    pedido
+    producto
 
-Luego, ejecutar el archivo schema_completo.sql, ubicado dentro de la carpeta FoodStore:
 
-psql -d foodstore_trabajo -f FoodStore/schema_completo.sql
+## Paso 2: Realizar la carga masiva
 
-Este archivo crea la estructura de la base de datos, incluyendo las tablas, relaciones, restricciones y demás elementos definidos en el esquema.
+1. Una vez creada correctamente la estructura, se debe ejecutar el archivo "data.sql" que se encuentra en la carpeta "food_store"
+2. copie el codigo de ese archivo en un script vinculado a la base de datos creada
+3. ejecute el script
+4. para verificar que se cargo masivamente puede realizar las siguientes consultas:
 
-Verificación
+    A-verificar cuántos registros se cargaron en cada tabla
 
-Para comprobar que las tablas fueron creadas correctamente, ingresar a la base de datos:
+        SELECT 'categoria' AS tabla, COUNT(*) FROM categoria
+        UNION ALL
+        SELECT 'cliente', COUNT(*) FROM cliente
+        UNION ALL
+        SELECT 'producto', COUNT(*) FROM producto
+        UNION ALL
+        SELECT 'pedido', COUNT(*) FROM pedido
+        UNION ALL
+        SELECT 'detalle_pedido', COUNT(*) FROM detalle_pedido;
 
-psql -d foodstore_trabajo
+    B-comprobar que todos los productos tengan una categoría válida.
 
-Y ejecutar:
+        SELECT
+            'Productos sin categoría' AS verificacion,
+            COUNT(*) AS errores
+        FROM producto p
+        LEFT JOIN categoria c ON p.id_categoria = c.id_categoria
+        WHERE c.id_categoria IS NULL;
 
-\dt
-Paso 2: Realizar la carga masiva
+    C-verifica la relación entre pedido y cliente
 
-Una vez creada correctamente la estructura, se debe ejecutar el archivo data.sql.
+        SELECT
+            'Pedidos sin cliente' AS verificacion,
+            COUNT(*) AS errores
+        FROM pedido p
+        LEFT JOIN cliente c ON p.id_cliente = c.id_cliente
+        WHERE c.id_cliente IS NULL;
 
-El archivo se encuentra en:
-
-FoodStore/data.sql
-
-Ejecutar:
-
-psql -d foodstore_trabajo -f FoodStore/data.sql
-
-Este archivo realiza la carga masiva de los datos necesarios para trabajar con la base.
-
-Orden de ejecución
+### Orden de ejecución
 
 Los pasos deben realizarse en el siguiente orden:
 
+```text
 1. Crear la base de datos foodstore_trabajo
             ↓
 2. Ejecutar schema_completo.sql
@@ -54,23 +82,27 @@ Los pasos deben realizarse en el siguiente orden:
 3. Ejecutar data.sql
             ↓
 4. Verificar la estructura y los datos
+```
 
 No se debe ejecutar data.sql antes de schema_completo.sql, ya que las tablas necesarias para almacenar los datos todavía no existirían.
 
-Verificación final
+## Verificación final
 
 Después de ejecutar ambos archivos, se puede comprobar que los datos fueron cargados correctamente.
 
 Por ejemplo:
 
+
 SELECT COUNT(*) FROM cliente;
 
-También se pueden verificar otras tablas:
 
 SELECT COUNT(*) FROM producto;
 
+
 SELECT COUNT(*) FROM pedido;
+
 
 SELECT COUNT(*) FROM detalle_pedido;
 
-Los resultados permiten comprobar que la carga masiva se realizó correctamente.
+
+Los resultados permiten comprobar que la carga masiva se realizó correctamente
