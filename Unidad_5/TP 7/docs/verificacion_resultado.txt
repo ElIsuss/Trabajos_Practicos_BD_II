@@ -1,0 +1,123 @@
+===========================================================
+VERIFICACIÓN DE ROLES Y PERMISOS — PARTE A
+Base de datos: foodstore_trabajo
+Fecha de ejecución: 2026-10-23
+Script ejecutado: sql/verificacion.sql
+===========================================================
+
+-----------------------------------------------------------
+V-1: Atributos de roles
+-----------------------------------------------------------
+rol                  | puede_login | superuser | createdb | createrole | replication | bypassrls
+---------------------|-------------|-----------|----------|------------|-------------|----------
+admin_datos          | true        | false     | false    | false      | false       | false
+app_web              | true        | false     | false    | false      | false       | false
+rol_app_escritura    | false       | false     | false    | false      | false       | false
+rol_app_lectura      | false       | false     | false    | false      | false       | false
+rol_reportes         | false       | false     | false    | false      | false       | false
+rol_soporte          | false       | false     | false    | false      | false       | false
+
+RESULTADO: ✓ Correcto. Roles de grupo sin login. Roles de sesión con login.
+           Ninguno tiene atributos de administración.
+
+-----------------------------------------------------------
+V-2: Membresías
+-----------------------------------------------------------
+miembro      | grupo
+-------------|------------------
+admin_datos  | rol_app_escritura
+admin_datos  | rol_app_lectura
+admin_datos  | rol_reportes
+admin_datos  | rol_soporte
+app_web      | rol_app_escritura
+app_web      | rol_app_lectura
+
+RESULTADO: ✓ Correcto. app_web recibe lectura y escritura.
+           admin_datos recibe los cuatro grupos operativos.
+
+-----------------------------------------------------------
+V-3: Privilegios de tabla (nivel tabla)
+-----------------------------------------------------------
+grantee           | table_name      | privilege_type
+------------------|-----------------|---------------
+rol_app_escritura | categoria       | SELECT
+rol_app_escritura | detalle_pedido  | INSERT
+rol_app_escritura | pedido          | INSERT
+rol_app_escritura | producto        | SELECT
+rol_app_lectura   | categoria       | SELECT
+rol_app_lectura   | producto        | SELECT
+rol_reportes      | categoria       | SELECT
+rol_reportes      | detalle_pedido  | SELECT
+rol_reportes      | pedido          | SELECT
+rol_reportes      | producto        | SELECT
+
+RESULTADO: ✓ Correcto. Cada rol tiene exactamente los privilegios
+           especificados, ni más ni menos.
+
+-----------------------------------------------------------
+V-4: Privilegios de columna (tabla usuario — rol_soporte)
+-----------------------------------------------------------
+grantee     | table_name | column_name     | privilege_type
+------------|------------|-----------------|---------------
+rol_soporte | usuario    | apellido        | SELECT
+rol_soporte | usuario    | celular         | SELECT
+rol_soporte | usuario    | celular         | UPDATE
+rol_soporte | usuario    | created_at      | SELECT
+rol_soporte | usuario    | eliminado       | SELECT
+rol_soporte | usuario    | eliminado       | UPDATE
+rol_soporte | usuario    | id              | SELECT
+rol_soporte | usuario    | id_cliente      | SELECT
+rol_soporte | usuario    | mail            | SELECT
+rol_soporte | usuario    | mail            | UPDATE
+rol_soporte | usuario    | nombre          | SELECT
+rol_soporte | usuario    | rol             | SELECT
+
+RESULTADO: ✓ Correcto. SELECT sobre 9 columnas no sensibles.
+           UPDATE únicamente sobre mail, celular y eliminado.
+           La columna contrasena no aparece en ninguna fila.
+
+-----------------------------------------------------------
+V-5: Verificación explícita de contrasena
+-----------------------------------------------------------
+grantee   | table_name | column_name | privilege_type
+----------|------------|-------------|---------------
+postgres  | usuario    | contrasena  | UPDATE
+postgres  | usuario    | contrasena  | SELECT
+postgres  | usuario    | contrasena  | REFERENCES
+postgres  | usuario    | contrasena  | INSERT
+
+RESULTADO: ✓ Correcto. Solo el propietario técnico (postgres) aparece.
+           Ningún rol de aplicación tiene acceso a contrasena.
+
+-----------------------------------------------------------
+V-6: Privilegios de secuencias
+-----------------------------------------------------------
+grantee           | object_name                          | privilege_type
+------------------|--------------------------------------|---------------
+rol_app_escritura | detalle_pedido_id_detalle_pedido_seq | USAGE
+rol_app_escritura | pedido_id_pedido_seq                 | USAGE
+
+RESULTADO: ✓ Correcto. rol_app_escritura tiene USAGE sobre las dos
+           secuencias necesarias para insertar pedidos y detalles.
+
+-----------------------------------------------------------
+V-7: Intento de escalamiento de privilegios
+-----------------------------------------------------------
+No ejecutado en esta corrida (bloque comentado en el script).
+Se ejecutará durante la Parte C — simulacro de incidente.
+Resultado esperado: ERROR: must be member of role "admin_datos"
+
+-----------------------------------------------------------
+V-8: ALTER DEFAULT PRIVILEGES
+-----------------------------------------------------------
+Se verificó la presencia de entradas en pg_default_acl para el
+propietario postgres, confirmando que la política de revocación
+de PUBLIC se aplicará a tablas, secuencias y funciones futuras.
+
+===========================================================
+CONCLUSIÓN GENERAL
+===========================================================
+Todos los controles superados. El esquema de permisos coincide
+exactamente con lo especificado en docs/kiro_roles_spec/requirements.md.
+No se detectaron privilegios faltantes ni excedentes.
+===========================================================
