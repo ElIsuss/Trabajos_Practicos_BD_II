@@ -1,0 +1,37 @@
+2026-10-23 19:05:58 -03 LOG:  el sistema de bases de datos fue apagado en 2026-10-23 19:05:57 -03
+2026-10-23 19:06:03 -03 LOG:  conexión recibida: host=10.0.0.1 port=50100
+2026-10-23 19:06:03 -03 LOG:  conexión autenticada: identidad="admin_sys" método=scram-sha-256
+2026-10-23 19:06:03 -03 LOG:  conexión autorizada: usuario=admin_sys base_de_datos=db_produccion nombre_de_aplicación=app_interna
+2026-10-23 19:07:18 -03 LOG:  sentencia: CREATE OR REPLACE FUNCTION fn_verificar_cred(p_mail VARCHAR, p_contrasena VARCHAR)
+    RETURNS BOOLEAN
+    LANGUAGE plpgsql
+    SECURITY DEFINER
+    AS $$
+    DECLARE
+        v_autenticado BOOLEAN;
+    BEGIN
+        SELECT EXISTS(
+            SELECT 1 FROM usuarios
+            WHERE mail = p_mail
+              AND contrasena = p_contrasena
+              AND eliminado = FALSE
+        ) INTO v_autenticado;
+
+        RETURN v_autenticado;
+    END;
+    $$;
+2026-10-23 19:07:18 -03 LOG:  sentencia: ALTER ROLE rol_tecnico_01 PASSWORD '****';
+2026-10-23 19:07:18 -03 LOG:  conexión recibida: host=10.0.0.1 port=50101
+2026-10-23 19:07:18 -03 LOG:  conexión autenticada: identidad="rol_tecnico_01" método=scram-sha-256
+2026-10-23 19:07:18 -03 LOG:  conexión autorizada: usuario=rol_tecnico_01 base_de_datos=db_produccion nombre_de_aplicación=app_interna
+2026-10-23 19:07:18 -03 LOG:  desconexión: duración de sesión: 0:01:14.922 usuario=admin_sys base=db_produccion host=10.0.0.1 port=50100
+2026-10-23 19:07:18 -03 ERROR:  permiso denegado a la tabla usuarios
+2026-10-23 19:07:18 -03 SENTENCIA:  SELECT * FROM usuarios LIMIT 1000;
+2026-10-23 19:07:18 -03 LOG:  sentencia: GRANT rol_admin TO rol_tecnico_01;
+2026-10-23 19:07:18 -03 ERROR:  se ha denegado el permiso para otorgar el rol «rol_admin»
+2026-10-23 19:07:18 -03 DETALLE:  Sólo los roles con la opción ADMIN en el rol «rol_admin» pueden otorgar este rol.
+2026-10-23 19:07:18 -03 SENTENCIA:  GRANT rol_admin TO rol_tecnico_01;
+2026-10-23 19:07:18 -03 LOG:  conexión recibida: host=10.0.0.1 port=50102
+2026-10-23 19:07:18 -03 LOG:  conexión autenticada: identidad="rol_tecnico_01" método=scram-sha-256
+2026-10-23 19:07:18 -03 LOG:  conexión autorizada: usuario=rol_tecnico_01 base_de_datos=db_produccion nombre_de_aplicación=app_interna
+2026-10-23 19:07:18 -03 LOG:  desconexión: duración de sesión: 0:00:00.313 usuario=rol_tecnico_01 base=db_produccion host=10.0.0.1 port=50101
