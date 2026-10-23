@@ -94,7 +94,61 @@ La IA señaló que revocar permisos del schema public no es suficiente si cualqu
 
 ---
 
-## Parte B — (pendiente)
+## Parte B — Activación y prueba de la auditoría
+
+### B.1 — Configuración de parámetros
+
+**Fecha:** 2026-10-23  
+**Archivo modificado:** `C:\Program Files\PostgreSQL\17\data\postgresql.conf`
+
+Se activaron tres parámetros de auditoría:
+
+| Parámetro | Valor nuevo |
+|---|---|
+| `log_connections` | `on` |
+| `log_disconnections` | `on` |
+| `log_statement` | `mod` |
+
+Los cambios requirieron reinicio del servicio (`Restart-Service postgresql-x64-17`) porque
+`pg_reload_conf()` no aplicó `log_connections` ni `log_disconnections` en caliente.
+
+**Informe completo:** `docs/informe_auditoria_nativa.md`
+
+---
+
+### B.2 — Operaciones de prueba y log capturado
+
+**Fecha:** 2026-10-23
+
+Se ejecutaron cuatro operaciones contra `foodstore_trabajo`:
+
+| Operación | Resultado |
+|---|---|
+| `SELECT * FROM producto LIMIT 5` | Exitoso (no aparece en log con `mod`) |
+| `INSERT INTO pedido ...` | Exitoso — registrado en log |
+| `UPDATE producto SET stock = stock - 1 ...` | Exitoso — registrado en log |
+| Login con `app_web` y contraseña incorrecta | FATAL — registrado en log |
+
+Fragmento de log y análisis completo en `docs/informe_auditoria_nativa.md`.
+
+---
+
+### B.3 — Análisis del fragmento
+
+El log registra: quién (usuario autenticado), qué (sentencia SQL completa), cuándo
+(timestamp con zona horaria) y desde dónde (IP y puerto). No registra detalle fila por
+fila, lecturas con `log_statement = mod`, ni el usuario de aplicación detrás de una
+conexión compartida. La extensión `pgaudit` cubriría esas limitaciones.
+
+---
+
+### B.4 — El log como activo sensible
+
+El log es un activo sensible porque expone el historial completo de operaciones,
+usuarios e IPs. Debe ser accesible solo para el usuario del servicio PostgreSQL y
+administradores con necesidad comprobada, con permisos `640` en Unix o ACL
+equivalentes en Windows. Ningún rol de base de datos debería tener acceso directo
+al sistema de archivos donde residen los logs.
 
 ---
 
