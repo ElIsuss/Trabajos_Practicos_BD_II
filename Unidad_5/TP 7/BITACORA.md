@@ -152,7 +152,185 @@ al sistema de archivos donde residen los logs.
 
 ---
 
-## Parte C — (pendiente)
+## Parte C — Laboratorio: simulacro de incidente de acceso indebido
+
+### C.1 — Reconstrucción de prerrequisitos
+
+**Fecha:** 2026-10-23
+
+`fn_autenticar` no existía en la base `foodstore`. Se reconstruyó como paso previo al simulacro, incluyéndola al inicio del script `sql/simulacro_incidente.sql`. La función compara en texto plano contra `usuario.contrasena` (suficiente para entorno de desarrollo). También se seteó la contraseña de `app_web` (que estaba como `PASSWORD NULL` en `roles.sql`) dentro del mismo script.
+
+Adicionalmente, se detectó que los parámetros de auditoría de la Parte B estaban configurados en PostgreSQL 17, pero el simulacro se ejecutó sobre PostgreSQL 18. Se aplicaron los parámetros con `ALTER SYSTEM` y se reinició el servicio `postgresql-x64-18` antes de ejecutar el simulacro.
+
+### C.2 — Ejecución del simulacro
+
+**Fecha:** 2026-10-23  
+**Script:** `sql/simulacro_incidente.sql`
+
+El simulacro reprodujo la secuencia completa:
+
+| Fase | Acción | Resultado | ¿Registrada en log? |
+|---|---|---|---|
+| 1 | 3 intentos fallidos de `fn_autenticar` | `f` en los tres | No (SELECTs con `log_statement = mod`) |
+| 2 | 1 login exitoso de `fn_autenticar` | `t` | No (SELECT con `log_statement = mod`) |
+| 3 | Conexión como `app_web` | Conexión exitosa | Sí (`log_connections = on`) |
+| 4 | `SELECT * FROM usuario` | `ERROR: permiso denegado a la tabla usuario` | No (SELECT, pero el error de permission denied sí se registra) |
+| 5 | `GRANT admin_datos TO app_web` | `ERROR: se ha denegado el permiso para otorgar el rol «admin_datos»` | Sí (modificación + error) |
+| 6 | Reconexión como `postgres` | Reconectado (como `app_web` por no especificar usuario) | Sí (`log_connections = on`) |
+
+El escalamiento (Fase 5) falló como se esperaba: `app_web` no tiene `CREATEROLE` ni `ADMIN OPTION` sobre `admin_datos`.
+
+### C.3 — Anonimización del log
+
+**Fecha:** 2026-10-23
+
+El fragmento de log se anonimizó antes de enviarlo a la IA:
+- Nombres de roles reales (`app_web`, `postgres`, `admin_datos`) → sintéticos (`rol_tecnico_01`, `admin_sys`, `rol_admin`)
+- Nombre de la base de datos (`foodstore`) → `db_produccion`
+- Nombre de la función (`fn_autenticar`) → `fn_verificar_cred`
+- Nombre de la tabla (`usuario`) → `usuarios`
+- IPs y puertos → valores sintéticos (`10.0.0.1`, puertos `50100`-`50102`)
+- Nombre de la aplicación (`pgAdmin 4 - DB:foodstore`) → `app_interna`
+- Contraseña seteada → enmascarada como `****`
+
+**Archivo anonimizado:** `docs/log_simulacro_anonimizado.txt`
+
+### C.4 — Reconstrucción con IA
+
+**Fecha:** 2026-10-23  
+**Herramienta:** OpenCode (Kiro)
+
+Se entregó el log anonimizado a la IA sin contexto adicional y se le pidió que reconstruyera qué ocurrió y propusiera una hipótesis de contención.
+
+#### Prompt enviado
+
+El fragmento de log anonimizado (`docs/log_simulacro_anonimizado.txt`) sin contexto adicional, seguido de: "Reconstruye qué ocurrió a partir de este fragmento de log y propón una hipótesis de contención."
+
+#### Respuesta de la IA (resumen)
+
+La IA reconstruyó la siguiente secuencia:
+1. El servidor fue reiniciado.
+2. Un usuario administrativo (`admin_sys`) se conectó y creó una función de verificación de credenciales con `SECURITY DEFINER`, y modificó la contraseña de `rol_tecnico_01`.
+3. Inmediatamente después, alguien se conectó como `rol_tecnico_01` desde el mismo host.
+4. Intentó leer la tabla `usuarios` y recibió permiso denegado.
+5. Intentó escalar privilegios con `GRANT rol_admin TO rol_tecnico_01`, denegado por falta de `ADMIN OPTION`.
+6. Se reconectó y la sesión anterior se cerró.
+
+Hipótesis de contención de la IA: un atacante con acceso a credenciales de `rol_tecnico_01` intentó exfiltrar datos y escalar privilegios. Recomendó rotar la contraseña, bloquear la IP, investigar el origen y auditar la función.
+
+#### Validación o corrección humana
+
+| Aspecto | IA | Realidad | Evaluación |
+|---|---|---|---|
+| Conexión de `rol_tecnico_01` post cambio de contraseña | Detectó la conexión y la asoció al cambio de contraseña | Conexión de `app_web` en Fase 3 | ✓ Acierto |
+| Intento de lectura de `usuarios` | Detectó el `SELECT` y su rechazo | `SELECT * FROM usuario LIMIT 1000` en Fase 4 | ✓ Acierto |
+| Intento de escalamiento | Detectó el `GRANT` y lo interpretó como escalamiento | `GRANT admin_datos TO app_web` en Fase 5 | ✓ Acierto |
+| Reconexión final | Detectó la reconexión y cierre de sesión | Fase 6 | ✓ Acierto |
+| Fuerza bruta previa (3 intentos) | No la mencionó | 3 llamadas a `fn_autenticar` con contraseñas incorrectas en Fase 1 | ✗ Omisión: no visible en log con `mod` |
+| Login exitoso a nivel de aplicación | No lo mencionó | `fn_autenticar` retornó `t` en Fase 2 | ✗ Omisión: no visible en log con `mod` |
+| Origen del acceso a credenciales | Asumió que el atacante "tenía acceso" | Las credenciales fueron obtenidas por fuerza bruta contra `fn_autenticar` | ✗ Omisión: la causa real no es inferible del log |
+| Creación de la función | Sugirió auditar si fue parte del ataque | La función fue creada por el equipo como prerrequisito del simulacro | ⚠ Afirmación no sustentada: el log no permite distinguir acción legítima de maliciosa |
+
+**Caso más significativo de omisión de la IA:** la IA no pudo detectar la fuerza bruta ni el login exitoso a nivel de aplicación porque las llamadas a `fn_autenticar` son `SELECT`s y `log_statement = 'mod'` no las registra. Esto confirma la limitación identificada en la Parte B: la auditoría nativa con `mod` no captura lecturas, y un atacante podría intentar fuerza bruta sin dejar rastro en el log. La extensión `pgaudit` con `log_statement = 'all'` cubriría esta brecha.
+
+**Caso más significativo de afirmación no sustentada:** la IA sugirió auditar si la función `fn_verificar_cred` fue modificada como parte del ataque, asumiendo la hipótesis maliciosa sin evidencia para descartar la alternativa legítima. En realidad, la función fue creada por el equipo como paso previo al simulacro. El registro de la sentencia `CREATE OR REPLACE FUNCTION` en el log no permite distinguir el motivo.
+
+### C.5 — Decisión de contención
+
+**Decisión del equipo (no automatizada):**
+
+En un caso real, ante un incidente con esta evidencia, el equipo decidiría:
+
+1. **Rotar inmediatamente la contraseña de `app_web`** y revocar todos los tokens de sesión activos, dado que la cuenta fue usada para conectarse después de un cambio de credenciales sospechoso.
+2. **Bloquear la IP de origen** y revisar si hubo conexiones desde otras IPs en el mismo periodo.
+3. **Activar `log_statement = 'all'`** temporalmente para capturar las lecturas que el `mod` no registra, permitiendo rastrear futuros intentos de fuerza bruta contra `fn_autenticar`.
+4. **Revisar el código de `fn_autenticar`** para implementar rate limiting o bloqueo tras N intentos fallidos, ya que el log demostró que la fuerza bruta a nivel de aplicación es invisible para la auditoría nativa con `mod`.
+
+Los puntos 1 y 2 coinciden con la sugerencia de la IA. Los puntos 3 y 4 surgen del contraste: la IA no detectó la fuerza bruta porque el log no la registra, y esa omisión es la que motiva estas dos medidas adicionales.
+
+**Informe completo:** `docs/informe_incidente.md`
+
+Esta decisión fue tomada por el equipo a partir de la evidencia del log y el contraste con la reconstrucción de la IA. No se ejecutó automáticamente a partir de la sugerencia de la IA.
+
+---
+
+## Parte D — Protección de datos personales: anonimización y verificación de equivalencia
+
+### D.1 — Construcción de usuario_anon
+
+**Fecha:** 2026-10-23  
+**Script:** `sql/usuario_anon.sql`
+
+Se creó la tabla `usuario_anon` a partir de `usuario` con datos sintéticos deterministas. Las columnas con datos personales (`nombre`, `apellido`, `mail`, `celular`, `contrasena`) se reemplazaron por valores sintéticos derivados del `id`. Las columnas de agregación (`rol`, `eliminado`, `created_at`, `id_cliente`) se preservaron idénticas.
+
+Ambas tablas tienen 20.000 filas.
+
+### D.2 — Consulta de agregación y equivalencia
+
+**Fecha:** 2026-10-23
+
+Se ejecutó la consulta "cantidad de usuarios por rol y por mes de alta" sobre ambas tablas:
+
+| Tabla | Resultado |
+|---|---|
+| `usuario_anon` | `USUARIO / 2026-09-01 / 20000` (1 fila) |
+| `usuario` | `USUARIO / 2026-09-01 / 20000` (1 fila) |
+
+Los resultados agregados son idénticos: mismos agrupamientos, mismos conteos.
+
+### D.3 — Información que no debería salir a una IA sin anonimizar
+
+Nombres y apellidos reales de clientes, correos electrónicos, números de teléfono y contraseñas de la tabla `usuario` no deben enviarse a un asistente de IA sin pasar antes por anonimización. Cualquier combinación de atributos que permita reidentificar a un individuo (por ejemplo, correo electrónico más fecha de alta) debe ser tratada como dato personal.
+
+**Informe completo:** `docs/verificacion_equivalencia.md`
+
+---
+
+## Parte E — Cierre: consolidación de la bitácora de IA
+
+### E.1 — Consolidación de registros A-D
+
+La bitácora registra las siguientes interacciones con IA a lo largo del trabajo:
+
+| Parte | Sección | Herramienta | Prompt enviado | Respuesta (resumen) | Validación humana |
+|---|---|---|---|---|---|
+| A | A.4 | OpenCode | "Auditá roles.sql y proponé mejoras" | 4 sugerencias: SELECT en cliente para escritura y reportes, SELECT en pedido para soporte, REVOKE CONNECT | 2 aplicadas (cliente para escritura/reportes, REVOKE CONNECT), 1 rechazada (soporte con pedido/detalle_pedido — más amplio de lo necesario), 1 aplicada (REVOKE CONNECT) |
+| B | — | — | Sin interacción con IA (configuración manual de parámetros) | — | — |
+| C | C.4 | Kiro (IA) | Log anonimizado sin contexto: "Reconstruye qué ocurrió y propón una hipótesis de contención" | Reconstruyó conexión, intento de lectura, escalamiento y reconexión. Omitió fuerza bruta y login exitoso. Sugirió auditar si la función fue parte del ataque. | Contrastada contra realidad: 4 aciertos, 3 omisiones, 1 afirmación no sustentada. Decisión de contención tomada por el equipo, no por la IA. |
+| D | — | OpenCode | Plan de implementación para usuario_anon.sql | Script SQL completo con CREATE TABLE, índices y consultas de agregación | Ejecutado sin modificaciones. Resultados verificados: equivalencia confirmada. |
+
+### E.2 — Caso más significativo de error o imprecisión de la IA
+
+El caso más significativo se encuentra en la **Parte C (C.4)**: la IA no pudo detectar la fuerza bruta previa al incidente porque las llamadas a `fn_autenticar` son `SELECT`s y `log_statement = 'mod'` no las registra. La IA recibió el log anonimizado, reconstruyó correctamente la conexión, el intento de lectura y el escalamiento, pero omitió por completo las Fases 1 y 2 del simulacro (3 intentos fallidos y 1 login exitoso a nivel de aplicación). Esto no es un error de la IA sino una limitación del mecanismo de auditoría: el log simplemente no contiene esa información. Sin embargo, la IA tampoco señaló esta limitación — no advirtió que podían haber ocurrido operaciones no registradas. Se detectó al contrastar la reconstrucción con la secuencia real ejecutada: la discrepancia entre lo que la IA reportó y lo que realmente pasó reveló que la auditoría nativa con `mod` deja un punto ciego que un atacante puede explotar sin dejar rastro.
+
+Como segundo caso destacable, en la **Parte A (A.4)** la IA propuso otorgar `SELECT` sobre `pedido` y `detalle_pedido` a `rol_soporte`, ampliando el alcance del rol más allá de lo definido en la especificación. Se detectó comparando la sugerencia contra el principio de mínimo privilegio: `rol_soporte` solo necesita datos de contacto del usuario, no historial de transacciones.
+
+### E.3 — Revisión del historial de Git
+
+**Estado actual del repositorio:**
+
+| Parte | Estado del commit |
+|---|---|
+| A | Commiteado — `9ddec96` "Trabajo Practico N°7 - Resolucion de la parte A" |
+| B | Commiteado — `ca895db` "Trabajo Practico N°7 - Resolucion de la parte B" |
+| C | Pendiente de commit |
+| D | Pendiente de commit |
+| E | Pendiente de commit |
+
+El historial refleja el avance por partes para A y B, con mensajes legibles. Las Partes C, D y E están implementadas pero aún no commiteadas. Se recomienda realizar un commit por cada parte pendiente siguiendo la misma convención:
+
+```bash
+git add Unidad_5/TP\ 7/sql/simulacro_incidente.sql Unidad_5/TP\ 7/docs/informe_incidente.md Unidad_5/TP\ 7/docs/log_simulacro_anonimizado.txt Unidad_5/TP\ 7/BITACORA.md
+git commit -m "Trabajo Practico N°7 - Resolucion de la parte C"
+
+git add Unidad_5/TP\ 7/sql/usuario_anon.sql Unidad_5/TP\ 7/docs/verificacion_equivalencia.md Unidad_5/TP\ 7/BITACORA.md
+git commit -m "Trabajo Practico N°7 - Resolucion de la parte D"
+
+git add Unidad_5/TP\ 7/BITACORA.md
+git commit -m "Trabajo Practico N°7 - Resolucion de la parte E"
+```
+
+**Nota:** los archivos correspondientes a la Parte 2 del TP de Unidad 4 (`tp_desnormalizacion_top_categorias.sql`, `Informe_RTA_TP_4.md`, `schema_completo.sql` modificado y el backup) también están pendientes de commit y deberían commitearse en un commit separado del TP de Unidad 4.
 
 ---
 
