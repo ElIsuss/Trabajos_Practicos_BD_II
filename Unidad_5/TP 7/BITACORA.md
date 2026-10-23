@@ -313,24 +313,11 @@ Como segundo caso destacable, en la **Parte A (A.4)** la IA propuso otorgar `SEL
 |---|---|
 | A | Commiteado — `9ddec96` "Trabajo Practico N°7 - Resolucion de la parte A" |
 | B | Commiteado — `ca895db` "Trabajo Practico N°7 - Resolucion de la parte B" |
-| C | Pendiente de commit |
-| D | Pendiente de commit |
-| E | Pendiente de commit |
+| C | Commiteado — `d3dabf4` "Trabajo Practico N7 - Resolucion de la parte C" |
+| D | Commiteado — `a923a6a` "Trabajo Practico N7 - Resolucion de la parte D" |
+| E | Commiteado — `42ddffb` "Trabajo Practico N7 - Resolucion de la parte E y consolidacion de bitacora" |
 
-El historial refleja el avance por partes para A y B, con mensajes legibles. Las Partes C, D y E están implementadas pero aún no commiteadas. Se recomienda realizar un commit por cada parte pendiente siguiendo la misma convención:
-
-```bash
-git add Unidad_5/TP\ 7/sql/simulacro_incidente.sql Unidad_5/TP\ 7/docs/informe_incidente.md Unidad_5/TP\ 7/docs/log_simulacro_anonimizado.txt Unidad_5/TP\ 7/BITACORA.md
-git commit -m "Trabajo Practico N°7 - Resolucion de la parte C"
-
-git add Unidad_5/TP\ 7/sql/usuario_anon.sql Unidad_5/TP\ 7/docs/verificacion_equivalencia.md Unidad_5/TP\ 7/BITACORA.md
-git commit -m "Trabajo Practico N°7 - Resolucion de la parte D"
-
-git add Unidad_5/TP\ 7/BITACORA.md
-git commit -m "Trabajo Practico N°7 - Resolucion de la parte E"
-```
-
-**Nota:** los archivos correspondientes a la Parte 2 del TP de Unidad 4 (`tp_desnormalizacion_top_categorias.sql`, `Informe_RTA_TP_4.md`, `schema_completo.sql` modificado y el backup) también están pendientes de commit y deberían commitearse en un commit separado del TP de Unidad 4.
+El historial refleja el avance por partes con un commit por cada una y mensajes legibles. Adicionalmente, los cambios de la Parte 2 del TP de Unidad 4 (desnormalización controlada) se commitearon en un commit separado: `958f4d0` "TP Unidad 4 - Parte 2: desnormalizacion controlada con vista materializada".
 
 ---
 
