@@ -1,0 +1,4 @@
+[2026-10-24 16:41:13] Iniciando respaldo de la base 'foods_store_completo' en localhost:5432
+[2026-10-24 16:41:13] Archivo de destino: C:\Users\Usuario\Desktop\UTN\BASE DE DATOS II\TP Y ENTREGAS\Base_datos_TPS\Unidad_6\TP 8\backups\foodstore_2026-10-24_1641.dump
+[2026-10-24 16:41:13] Usando pg_dump: C:\Program Files\PostgreSQL\17\bin\pg_dump.exe
+[2026-10-24 16:41:15] Respaldo completado exitosamente: C:\Users\Usuario\Desktop\UTN\BASE DE DATOS II\TP Y ENTREGAS\Base_datos_TPS\Unidad_6\TP 8\backups\foodstore_2026-10-24_1641.dump
