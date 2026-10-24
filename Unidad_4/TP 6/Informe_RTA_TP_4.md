@@ -251,7 +251,219 @@ La equivalencia queda verificada empíricamente: la vista reproduce la relación
 
 ## Parte 2 — Consulta con desnormalización controlada
 
-> *Pendiente de completarse. Requiere la medición con `EXPLAIN ANALYZE` sobre la base poblada y la ejecución del script `Unidad_4/tp_desnormalizacion_top_categorias.sql`.*
+### Nota de adaptación al schema real
+
+La consulta del enunciado utiliza nombres de columna que difieren del schema original del proyecto. Se aplicaron los siguientes ajustes manteniendo la misma lógica de negocio:
+
+| Enunciado | Schema real | Motivo |
+|---|---|---|
+| `pr.id` | `pr.id_producto` | Nombre real de la PK |
+| `c.id` | `c.id_categoria` | Nombre real de la PK |
+| `ped.id` | `ped.id_pedido` | Nombre real de la PK |
+| `dp.producto_id` | `dp.id_producto` | Nombre real de la FK |
+| `dp.pedido_id` | `dp.id_pedido` | Nombre real de la FK |
+| `dp.subtotal` | `dp.cantidad * dp.precio_unitario` | La columna no existe; se calcula en línea |
+| `ped.fecha` | `ped.fecha_hora::date` | La columna es `TIMESTAMPTZ`; se castea a `DATE` |
+| `dp.eliminado`, `ped.eliminado` | `dp.eliminado`, `ped.eliminado` | Columnas agregadas al schema mediante `ALTER TABLE` (ver `backup_2026-10-08_1800.sql`) para representar el borrado lógico requerido por el enunciado |
+
+---
+
+### 5.2.a — EXPLAIN ANALYZE: consulta original
+
+**Consulta adaptada al schema real:**
+
+```sql
+EXPLAIN ANALYZE
+SELECT c.nombre AS categoria,
+       SUM(dp.cantidad * dp.precio_unitario) AS total_vendido
+FROM detalle_pedido dp
+JOIN producto pr  ON pr.id_producto = dp.id_producto
+JOIN categoria c  ON c.id_categoria = pr.id_categoria
+JOIN pedido ped   ON ped.id_pedido  = dp.id_pedido
+WHERE ped.fecha_hora::date = '2026-09-09'
+  AND dp.eliminado  = FALSE
+  AND ped.eliminado = FALSE
+GROUP BY c.nombre
+ORDER BY total_vendido DESC
+LIMIT 5;
+```
+
+**Salida del EXPLAIN ANALYZE:**
+
+```
+ Limit  (cost=11309.95..11309.97 rows=5 width=42) (actual time=133.741..145.593 rows=5.00 loops=1)
+   Buffers: shared hit=4277 read=656
+   ->  Sort  (cost=11309.95..11309.98 rows=10 width=42) (actual time=133.740..145.592 rows=5.00 loops=1)
+         Sort Key: (sum(((dp.cantidad)::numeric * dp.precio_unitario))) DESC
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=4277 read=656
+         ->  Finalize GroupAggregate  (cost=11285.46..11309.79 rows=10 width=42) (actual time=133.498..145.554 rows=10.00 loops=1)
+               Group Key: c.nombre
+               Buffers: shared hit=4277 read=656
+               ->  Gather Merge  (cost=11285.46..11309.54 rows=17 width=42) (actual time=133.464..145.534 rows=20.00 loops=1)
+                     Workers Planned: 1
+                     Workers Launched: 1
+                     Buffers: shared hit=4277 read=656
+                     ->  Partial GroupAggregate  (cost=10285.45..10307.61 rows=10 width=42) (actual time=90.196..90.341 rows=10.00 loops=2)
+                           Group Key: c.nombre
+                           Buffers: shared hit=4277 read=656
+                           ->  Sort  (cost=10285.45..10289.86 rows=1763 width=20) (actual time=90.100..90.127 rows=396.00 loops=2)
+                                 Sort Key: c.nombre
+                                 Sort Method: quicksort  Memory: 48kB
+                                 Buffers: shared hit=4277 read=656
+                                 Worker 0:  Sort Method: quicksort  Memory: 33kB
+                                 ->  Hash Join  (cost=1.94..10190.39 rows=1763 width=20) (actual time=2.196..89.472 rows=396.00 loops=2)
+                                       Hash Cond: (pr.id_categoria = c.id_categoria)
+                                       Buffers: shared hit=4269 read=656
+                                       ->  Nested Loop  (cost=0.71..10182.58 rows=1763 width=18) (actual time=1.669..88.572 rows=396.00 loops=2)
+                                             Buffers: shared hit=4267 read=656
+                                             ->  Nested Loop  (cost=0.42..9629.76 rows=1763 width=18) (actual time=1.375..67.613 rows=396.00 loops=2)
+                                                   Buffers: shared hit=2025 read=521
+                                                   ->  Parallel Seq Scan on pedido ped  (cost=0.00..3235.71 rows=588 width=8) (actual time=0.251..28.002 rows=134.00 loops=2)
+                                                         Filter: ((fecha_hora)::date = '2026-09-09'::date)
+                                                         Rows Removed by Filter: 99866
+                                                         Buffers: shared hit=1471
+                                                   ->  Index Scan using unq_pedido_producto on detalle_pedido dp  (cost=0.42..10.83 rows=4 width=26) (actual time=0.291..0.293 rows=2.96 loops=268)
+                                                         Index Cond: (id_pedido = ped.id_pedido)
+                                                         Index Searches: 268
+                                                         Buffers: shared hit=554 read=521
+                                             ->  Index Scan using producto_pkey on producto pr  (cost=0.29..0.31 rows=1 width=16) (actual time=0.051..0.051 rows=1.00 loops=792)
+                                                   Index Cond: (id_producto = dp.id_producto)
+                                                   Index Searches: 792
+                                                   Buffers: shared hit=2242 read=135
+                                       ->  Hash  (cost=1.10..1.10 rows=10 width=18) (actual time=0.480..0.481 rows=10.00 loops=2)
+                                             Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                             Buffers: shared hit=2
+                                             ->  Seq Scan on categoria c  (cost=0.00..1.10 rows=10 width=18) (actual time=0.448..0.452 rows=10.00 loops=2)
+                                                   Buffers: shared hit=2
+ Planning Time: 1.031 ms
+ Execution Time: 145.731 ms
+```
+
+**Resumen:**
+
+| Métrica | Valor |
+|---|---|
+| Tiempo de ejecución | **145.731 ms** |
+| Nodo dominante | **Parallel Seq Scan on pedido** |
+
+El cuello de botella es el `Parallel Seq Scan on pedido`: PostgreSQL recorre las 200.000 filas completas de la tabla y descarta ~99.866 por worker porque el cast `fecha_hora::date` impide usar un índice sobre la columna directamente. Incluso con paralelismo (1 worker lanzado), ese escaneo completo arrastra el tiempo total.
+
+---
+
+### 5.2.b — Elección del patrón de desnormalización
+
+Se elige una **vista materializada** (`mv_top_categorias_dia`). La evidencia del punto (a) muestra que el costo dominante es el `Parallel Seq Scan on pedido` de 145.731 ms, provocado por los cuatro JOINs y el cast de fecha que impide el uso de índices; ese costo se repite en cada ejecución del panel. La vista materializada elimina completamente ese recorrido al precalcular y almacenar el resultado agregado, y la sincronización se garantiza ejecutando `REFRESH MATERIALIZED VIEW CONCURRENTLY` al comienzo de cada día (vía `pg_cron` o llamada explícita), lo que regenera el dato desde las tablas originales sin bloquear lecturas concurrentes. Es completamente reversible: un `DROP MATERIALIZED VIEW mv_top_categorias_dia` elimina únicamente la estructura redundante sin tocar ni modificar ninguna tabla fuente, sin pérdida de información.
+
+---
+
+### 5.2.c — Implementación
+
+```sql
+-- Estructura desnormalizada
+CREATE MATERIALIZED VIEW mv_top_categorias_dia AS
+SELECT
+    c.nombre                                    AS categoria,
+    ped.fecha_hora::date                        AS fecha,
+    SUM(dp.cantidad * dp.precio_unitario)       AS total_vendido
+FROM detalle_pedido dp
+JOIN producto pr  ON pr.id_producto = dp.id_producto
+JOIN categoria c  ON c.id_categoria = pr.id_categoria
+JOIN pedido ped   ON ped.id_pedido  = dp.id_pedido
+WHERE dp.eliminado  = FALSE
+  AND ped.eliminado = FALSE
+GROUP BY c.nombre, ped.fecha_hora::date
+WITH DATA;
+
+-- Índice único: necesario para REFRESH CONCURRENTLY y para acelerar
+-- las consultas filtradas por fecha
+CREATE UNIQUE INDEX idx_mv_top_categorias_dia
+    ON mv_top_categorias_dia (fecha, categoria);
+```
+
+La vista precalcula el total vendido por categoría y día para todo el dataset (7.310 filas: 10 categorías × ~731 días). El índice único sobre `(fecha, categoria)` es obligatorio para `REFRESH CONCURRENTLY` y además acelera las lecturas del panel.
+
+**Mecanismo de sincronización:**
+```sql
+-- Ejecutar al comienzo de cada día
+REFRESH MATERIALIZED VIEW CONCURRENTLY mv_top_categorias_dia;
+```
+
+---
+
+### 5.2.d — Consulta desnormalizada y comparación antes / después
+
+**Consulta sobre la vista materializada:**
+
+```sql
+EXPLAIN ANALYZE
+SELECT categoria, total_vendido
+FROM mv_top_categorias_dia
+WHERE fecha = '2026-09-09'
+ORDER BY total_vendido DESC
+LIMIT 5;
+```
+
+**Salida del EXPLAIN ANALYZE:**
+
+```
+ Limit  (cost=31.62..31.63 rows=5 width=18) (actual time=0.199..0.201 rows=5.00 loops=1)
+   Buffers: shared hit=10 read=2
+   ->  Sort  (cost=31.62..31.64 rows=10 width=18) (actual time=0.198..0.199 rows=5.00 loops=1)
+         Sort Key: total_vendido DESC
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=10 read=2
+         ->  Bitmap Heap Scan on mv_top_categorias_dia  (cost=4.36..31.45 rows=10 width=18) (actual time=0.162..0.180 rows=10.00 loops=1)
+               Recheck Cond: (fecha = '2026-09-09'::date)
+               Heap Blocks: exact=10
+               Buffers: shared hit=10 read=2
+               ->  Bitmap Index Scan on idx_mv_top_categorias_dia  (cost=0.00..4.36 rows=10 width=0) (actual time=0.115..0.116 rows=10.00 loops=1)
+                     Index Cond: (fecha = '2026-09-09'::date)
+                     Index Searches: 1
+                     Buffers: shared read=2
+ Planning Time: 2.472 ms
+ Execution Time: 0.258 ms
+```
+
+**Tabla comparativa antes / después:**
+
+| | Antes (tablas originales) | Después (vista materializada) |
+|---|---|---|
+| Tiempo de ejecución | 145.731 ms | **0.258 ms** |
+| Nodo dominante | Parallel Seq Scan on pedido | Bitmap Index Scan on idx_mv_top_categorias_dia |
+| Factor de mejora | — | **~565×** |
+
+---
+
+### 5.2.e — Script de auditoría
+
+```sql
+SELECT
+    fuente.categoria,
+    fuente.fecha,
+    fuente.total_vendido          AS total_fuente,
+    mv.total_vendido              AS total_mv,
+    fuente.total_vendido - mv.total_vendido AS diferencia
+FROM (
+    SELECT
+        c.nombre                              AS categoria,
+        ped.fecha_hora::date                  AS fecha,
+        SUM(dp.cantidad * dp.precio_unitario) AS total_vendido
+    FROM detalle_pedido dp
+    JOIN producto pr ON pr.id_producto = dp.id_producto
+    JOIN categoria c  ON c.id_categoria = pr.id_categoria
+    JOIN pedido ped   ON ped.id_pedido   = dp.id_pedido
+    WHERE dp.eliminado  = FALSE
+      AND ped.eliminado = FALSE
+    GROUP BY c.nombre, ped.fecha_hora::date
+) AS fuente
+JOIN mv_top_categorias_dia mv
+    ON mv.categoria = fuente.categoria
+    AND mv.fecha    = fuente.fecha
+WHERE fuente.total_vendido <> mv.total_vendido;
+```
+
+**Resultado obtenido sobre la base ya migrada: 0 filas.** La vista materializada está perfectamente sincronizada con las tablas fuente.
 
 ---
 
@@ -259,5 +471,5 @@ La equivalencia queda verificada empíricamente: la vista reproduce la relación
 
 | Artefacto | Ruta |
 |---|---|
-| Script de la Parte 1 | `Unidad_4/tp_fnbc_control_lote.sql` |
-| Script de la Parte 2 | `Unidad_4/tp_desnormalizacion_top_categorias.sql` (pendiente) |
+| Script de la Parte 1 | `Unidad_4/TP 6/tp_fnbc_control_lote.sql` |
+| Script de la Parte 2 | `Unidad_4/TP 6/tp_desnormalizacion_top_categorias.sql` |

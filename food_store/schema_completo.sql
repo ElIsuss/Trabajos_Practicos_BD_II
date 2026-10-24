@@ -65,6 +65,7 @@ CREATE TABLE pedido (
     fecha_hora TIMESTAMPTZ      NOT NULL DEFAULT now(),
     forma_pago forma_pago_enum  NOT NULL,
     id_cliente BIGINT           NOT NULL,
+    eliminado  BOOLEAN          NOT NULL DEFAULT FALSE,
 
     CONSTRAINT fk_pedido_cliente
         FOREIGN KEY (id_cliente)
@@ -79,6 +80,7 @@ CREATE TABLE detalle_pedido (
     id_producto       BIGINT         NOT NULL,
     cantidad          INT            NOT NULL,
     precio_unitario   NUMERIC(10,2)  NOT NULL,
+    eliminado         BOOLEAN        NOT NULL DEFAULT FALSE,
 
     -- Evita duplicar el mismo producto en un mismo pedido
     CONSTRAINT unq_pedido_producto
